@@ -2000,7 +2000,6 @@ int abox_register_extra_sound_card(struct device *dev,
 {
 	static DEFINE_MUTEX(lock);
 	static struct snd_soc_card *cards[SNDRV_CARDS];
-	struct snd_soc_card *tmp_cards[SNDRV_CARDS] = { };
 	int i;
 
 	if (idx >= ARRAY_SIZE(cards))
@@ -2008,18 +2007,18 @@ int abox_register_extra_sound_card(struct device *dev,
 
 	mutex_lock(&lock);
 	dev_dbg(dev, "%s(%s, %u)\n", __func__, card->name, idx);
+
 	cards[idx] = card;
-	memcpy(tmp_cards, cards, sizeof(cards));
+
+	for (i = ARRAY_SIZE(cards) - 1; i >= idx; i--)
+		if (cards[i])
+			snd_soc_unregister_card(cards[i]);
+
+	for (i = idx; i < ARRAY_SIZE(cards); i++)
+		if (cards[i])
+			snd_soc_register_card(cards[i]);
+
 	mutex_unlock(&lock);
-
-	for (i = ARRAY_SIZE(tmp_cards) - 1; i >= idx; i--)
-		if (tmp_cards[i])
-			snd_soc_unregister_card(tmp_cards[i]);
-
-	for (i = idx; i < ARRAY_SIZE(tmp_cards); i++)
-		if (tmp_cards[i])
-			snd_soc_register_card(tmp_cards[i]);
-
 	return 0;
 }
 
@@ -3085,7 +3084,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&data->iommu_maps);
 
 	data->ipc_workqueue = alloc_ordered_workqueue("abox_ipc",
-			WQ_MEM_RECLAIM);
+			WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!data->ipc_workqueue) {
 		dev_err(dev, "Couldn't create workqueue %s\n", "abox_ipc");
 		return -ENOMEM;
